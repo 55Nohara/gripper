@@ -20,7 +20,7 @@ OBJECT_NUM = 1 #number of object
 PWM_Min = 30 #探しておく
 #PWM_max = 60
 Label = 30 #プログラム開始前に必ず変更しておく
-# aa
+
 
 DATA_PATH = "C:\\Users\\imout\\Desktop\\study\\gripper\\data\\"
 # # data path to save evaluation result (graphs and RMSEs)
