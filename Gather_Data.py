@@ -148,7 +148,7 @@ def calibration(ser):
     object_pressure = np.zeros(1)
     calibrationIndex = 0
 
-    while(True):
+    while calibrationIndex < CONTROL_FREQ * CALIBRATION_TIME:
         chara = strFromArduino(ser, False)
         
         if (chara=='i'):
