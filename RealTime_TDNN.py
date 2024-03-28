@@ -32,7 +32,7 @@ GRAPH_NAME = "Realtime Force Adjustment"
 EXPORT_WEIGHT_FILE_NAME = "best_weights"
 
 
-CONTROL_FREQ = 20  # バルブ応答速度からPWMを決定した後、決定する。　一応オシロスコープで確認も
+CONTROL_FREQ = 10  # バルブ応答速度からPWMを決定した後、決定する。　一応オシロスコープで確認も
 CALIBRATION_TIME = 2  # キャリブレーションを行う時間。暫定、実験開始後に経験的に決定
 INPUT_CSV_NAME = "TRAIN_INPUT"
 SENSOR_CSV_NAME = "RAW_TRAIN_DATA"
@@ -41,8 +41,8 @@ CALIBRATION_CSV_NAME = "CALIBRATION"
 
 CONTROL_TIME = 64
 OBJECT_NUM = 1 #number of object
-PWM_Min = 30 #探しておく
 #PWM_max = 60
+
 
 DATA_PATH = "C:\\Users\\imout\\Desktop\\study\\gripper\\data\\"
 # # data path to save evaluation result (graphs and RMSEs)
@@ -58,12 +58,12 @@ def main():
             os.makedirs(DATA_PATH, exist_ok=True)
         except OSError as e:
             print(f"Error creating directory: {e}")
-           
-        inputData = setInputData(OBJECT_NUM) #get inputData from TDNN
+        
         sensorData = np.zeros((int(CONTROL_FREQ*CONTROL_TIME), 3))  # 0:pressure  1,2:strain
         _Data = np.zeros((int(CONTROL_FREQ*CONTROL_TIME), 1))
         offset = np.zeros(3)  # 0:pressure, 1,2:strain
         Label = np.zeros(1)
+        pred = np.zeros(int(CONTROL_FREQ*CONTROL_TIME))
         sendDataReady = False
         time.sleep(1)
         # print("hige")
@@ -78,11 +78,14 @@ def main():
             #repeat t and s for several times
             elif(chara=='t'):  # センサ信号(圧力、ひずみ)を受け取って2ポートバルブ用PWMDCを送る
                 sensorData[currentInputIndex, :], _Data = getSensorData(ser, offset)
-                sendControlInputToArduino(ser, inputData[currentInputIndex])
+                reshaped_Data = reshape(currentInputIndex, sensorData)
+                pred[currentInputIndex] = realtime_TDNN(reshaped_Data)
+                input_pwm = Convert_pwm(pred[currentInputIndex])
+                sendControlInputToArduino(ser, input_pwm)
                 currentInputIndex += 1
             elif chara == 's':  # 本制御開始
                 startTime = datetime.datetime.now()
-                print("<Data pre-input is done>" + "\nControl is started at " + str(startTime))
+                print("\nControl is started at " + str(startTime))
             elif chara == 'f':  # 本制御終了とCSVエクスポート
                 endTime = datetime.datetime.now()
                 print("end at " + str(endTime) + "\nControl time is " + str(endTime-startTime))
@@ -154,7 +157,7 @@ def calibration(ser):
     object_pressure = np.zeros(1)
     calibrationIndex = 0
 
-    while(True):
+    while calibrationIndex < CONTROL_FREQ * CALIBRATION_TIME:
         chara = strFromArduino(ser, False)
         
         if (chara=='i'):
@@ -239,21 +242,14 @@ def sendControlInputToArduino(serialInst, target):
     serialInst.flush()
 # endregion
 
-
-if __name__ == '__main__':
-    main()
-
-# endregion
-
-###########################################################################
+##########################################################################
 #add TDNN sensorData to pwmDC
 
 def realtime_TDNN(sensordata):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     preds = np.zeros(1)
-    sensordata = sensordata.reshape(1, t_input, 2)
     #get inputData from serial communication as numpy
-    sensordata = torch.from_numpy(sensordata)
+    sensordata = torch.tensor(sensordata, dtype=torch.float32)
 
     FNNModel = FNN_TDNN(HIDDEN_DIM, t_input)
     FNNModel.load_state_dict(torch.load(WEIGHT_DATA_PATH+"\\"+EXPORT_WEIGHT_FILE_NAME+SELECTED_EPOCH))
@@ -265,9 +261,9 @@ def realtime_TDNN(sensordata):
         ans = FNNModel(sensordata.to(device))
         preds = ans.to('cpu').detach().numpy().copy()
         
-        pwmDC = Convert_pwm(preds[0])
+        
     
-    return pwmDC, preds
+    return preds
 
 def Convert_pwm(preds):
     pwmDC = preds *100 #経験則から計算式を導出する??
@@ -276,15 +272,17 @@ def Convert_pwm(preds):
     
     return pwmDC
 
-#reshape senosrData t_input* 2
-def format_sensor(currentInputIndex, sensorData):
-    sensor = np.zeros((t_input, 2))
+#reshape senosrData t_input* 3
+def reshape(currentInputIndex, sensorData):
+    sensor = np.zeros((t_input, 3))
     if currentInputIndex < t_input:
-        start_col = t_input-currentInputIndex
+        start_col = t_input - currentInputIndex
         end_col = t_input
         sensor[start_col: end_col, :] = sensorData[:currentInputIndex+1, :]
+        sensor = sensor.reshape(1, t_input * 3)
     else:
         sensor[:,:] = sensorData[currentInputIndex-t_input:currentInputIndex, :]
+        sensor = sensor.reshape(1, t_input * 3)
     return sensor
 
 ###########################
@@ -317,3 +315,5 @@ def Label_Data(object_data):
 
 if __name__ == '__main__':
     main()
+
+# endregion
