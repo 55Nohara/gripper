@@ -42,7 +42,6 @@ def main():
         Label = np.zeros(1)
         sendDataReady = False
         time.sleep(1)
-        # print("hige")
         while(True):
             sendDataReady = sendDataReadyCommand(ser, 'e', sendDataReady)  # Activation, 初回の一度のみ起動
             chara = strFromArduino(ser, False)  # Arduinoからの信号, 受信してないときは-1を返す
@@ -81,7 +80,7 @@ def setInputData(object):
     #inputData = 60 * np.ones(int(CONTROL_FREQ * CONTROL_TIME)) + 40* np.random(int(CONTROL_FREQ * CONTROL_TIME))
     #original_data = 60 * np.ones(int(CONTROL_FREQ * CONTROL_TIME)) + 40* np.random(int(CONTROL_FREQ * CONTROL_TIME))
     #inputData = np.repeat(original_data, 2)
-    inputData = 5 * np.ones(int(CONTROL_FREQ * CONTROL_TIME))
+    inputData = 100 * np.ones(int(CONTROL_FREQ * CONTROL_TIME))
     csv_path = os.path.join(os.getcwd(), DATA_PATH, f"{INPUT_CSV_NAME}_.csv")
     try:
         existing_df = pd.read_csv(csv_path)
@@ -148,11 +147,11 @@ def calibration(ser):
     object_pressure = np.zeros(1)
     calibrationIndex = 0
 
-    while calibrationIndex < CONTROL_FREQ * CALIBRATION_TIME:
+    while(True):
         chara = strFromArduino(ser, False)
         
         if (chara=='i'):
-            pressure_data, strain_data_1, strain_data_2, o_data = getSensorDataFromArduino(ser)  # object_pressure は無視する
+            pressure_data, strain_data_1, strain_data_2, o_data = getSensorDataFromArduino(ser)  
             calibrationData[calibrationIndex, 0] = pressure_data
             calibrationData[calibrationIndex, 1] = strain_data_1
             calibrationData[calibrationIndex, 2] = strain_data_2
@@ -212,7 +211,6 @@ def strFromArduino(serialInst, sendData=True, sendChar='w'):
         # to activate serial.available()
         serialInst.write(bytes(sendChar, 'utf-8'))
         serialInst.flush()
-        print("send", sendChar)
     data = str(serialInst.read().decode('utf-8'))
     if data == '':  
         data = "-1"
