@@ -5,8 +5,10 @@ import serial
 import numpy as np
 import datetime
 import time
+from scipy import signal
 
-# 後は実際の実験時に適宜修正していく感じで
+
+
 
 CONTROL_FREQ = 20  # バルブ応答速度からPWMを決定した後、決定する。　一応オシロスコープで確認も
 CALIBRATION_TIME = 2  # キャリブレーションを行う時間。暫定、実験開始後に経験的に決定
@@ -16,14 +18,12 @@ LABEL_DATA_FILE_NAME = "LABEL"
 CALIBRATION_CSV_NAME = "CALIBRATION"
 
 CONTROL_TIME = 64
-OBJECT_NUM = 1 #number of object
-PWM_Min = 30 #探しておく
-#PWM_max = 60
+OBJECT_NUM = 6 #number of object
 
-DATA_PATH = "C:\\Users\\imout\\Desktop\\study\\gripper\\data\\"
-# # data path to save evaluation result (graphs and RMSEs)
+DATA_PATH = "C:\\Users\\Matsushima\\Desktop\\study\\gripper\\data\\"
 
-SAVE_FOLDER_PATH = "C:\\Users\\imout\\Desktop\\study\\gripper\\data\\"
+SAVE_FOLDER_PATH = "C:\\Users\\Matsushima\\Desktop\\study\\gripper\\data\\"
+
 
 def main():
     with serial.Serial('COM3', 115200, timeout=1) as ser:
@@ -36,11 +36,10 @@ def main():
             print(f"Error creating directory: {e}")
            
         inputData = setInputData(OBJECT_NUM) #get inputData from TDNN
-        sensorData = np.zeros((int(CONTROL_FREQ*CONTROL_TIME), 3))  # 0:pressure  1,2:strain
-        _Data = np.zeros((int(CONTROL_FREQ*CONTROL_TIME), 1))
-        offset = np.zeros(3)  # 0:pressure, 1,2:strain
-        Label = np.zeros(1)
+        sensorData = np.zeros((int(CONTROL_FREQ*CONTROL_TIME), 4))  # 0:pressure  1,2:strain 3:object
+        offset = np.zeros(4)  # 0:pressure, 1,2:strain
         sendDataReady = False
+        Label = np.zeros(1)
         time.sleep(1)
         while(True):
             sendDataReady = sendDataReadyCommand(ser, 'e', sendDataReady)  # Activation, 初回の一度のみ起動
@@ -52,7 +51,7 @@ def main():
                 print("<Calibration Finished>")
             #repeat t and s for several times
             elif(chara=='t'):  # センサ信号(圧力、ひずみ)を受け取って2ポートバルブ用PWMDCを送る
-                sensorData[currentInputIndex, :], _Data = getSensorData(ser, offset)
+                sensorData[currentInputIndex, :] = getSensorData(ser, offset)
                 sendControlInputToArduino(ser, inputData[currentInputIndex])
                 currentInputIndex += 1
             elif chara == 's':  # 本制御開始
@@ -61,8 +60,8 @@ def main():
             elif chara == 'f':  # 本制御終了とCSVエクスポート
                 endTime = datetime.datetime.now()
                 print("end at " + str(endTime) + "\nControl time is " + str(endTime-startTime))
-
-                export_train(sensorData, OBJECT_NUM)  # export current train data as CSV
+                sensorData = lowPassFilter(sensorData, CONTROL_FREQ, CONTROL_TIME)
+                export_train(sensorData[:,:3], OBJECT_NUM)  # export current train data as CSV
                 export_label(Label, OBJECT_NUM)  # export current label data as CSV
                 break
             elif chara == 'q':  # Timeout Error
@@ -73,14 +72,12 @@ def main():
 
             # endregion
 
-# region inputCalculation
-#when control realtime use tdnn
-#get inputData from csv file
 def setInputData(object):
-    #inputData = 60 * np.ones(int(CONTROL_FREQ * CONTROL_TIME)) + 40* np.random(int(CONTROL_FREQ * CONTROL_TIME))
-    #original_data = 60 * np.ones(int(CONTROL_FREQ * CONTROL_TIME)) + 40* np.random(int(CONTROL_FREQ * CONTROL_TIME))
-    #inputData = np.repeat(original_data, 2)
-    inputData = 100 * np.ones(int(CONTROL_FREQ * CONTROL_TIME))
+    num_cycles = 10
+    x_values = np.linspace(0, num_cycles * 2 * np.pi, int(CONTROL_FREQ * CONTROL_TIME))
+    inputData = np.round(35*np.sin(x_values)+65, 2)
+    #inputData = np.round(35*np.sin(x_values)+65, 2)
+    #inputData = 40 * np.ones(int(CONTROL_FREQ * CONTROL_TIME)) + 30* np.random.rand(int(CONTROL_FREQ * CONTROL_TIME))
     csv_path = os.path.join(os.getcwd(), DATA_PATH, f"{INPUT_CSV_NAME}_.csv")
     try:
         existing_df = pd.read_csv(csv_path)
@@ -96,13 +93,12 @@ def setInputData(object):
 
 # region sensing
 def getSensorData(ser, offset):
-    sensorData = np.zeros(3)
-    object_data = np.zeros(1)
+    sensorData = np.zeros(4)
     #sensorData[0] = calculateAngle(listener, inputIndex)
-    sensorData[0], sensorData[1], sensorData[2], object_data = getSensorDataFromArduino(ser)
-    sensorData -= offset
+    sensorData[0], sensorData[1], sensorData[2],sensorData[3]  = getSensorDataFromArduino(ser)
+    sensorData[:3] -= offset[:3]
 
-    return sensorData, object_data
+    return sensorData
 
 # よく考えてみたが、(簡単な)この形式で問題はないと思う。もし何かバグとか、問題が起きたら圧力データ受け取るときみたいに入力待ち信号を出す感じで。
 def getSensorDataFromArduino(ser):
@@ -134,6 +130,7 @@ def getSensorDataFromArduino(ser):
 
     return pressure_data, strain_data_1, strain_data_2, object_pressure
 
+
 # endregion
 
 
@@ -158,8 +155,9 @@ def calibration(ser):
             calibrationData[calibrationIndex, 3] = o_data
             calibrationIndex += 1
         elif (chara=='m'):
+            calibrationData = lowPassFilter(calibrationData, CONTROL_FREQ, CALIBRATION_TIME)
             press_calibration, strain_calibration_1, strain_calibration_2, object_pressure = calculateOffsetAndExportCSV(calibrationData)
-            Offset = press_calibration, strain_calibration_1, strain_calibration_2
+            Offset = press_calibration, strain_calibration_1, strain_calibration_2, object_pressure
             ser.write(bytes('m', 'utf-8'))  # 文字を送ってflush()する
             ser.flush()
             break
@@ -229,8 +227,24 @@ def sendControlInputToArduino(serialInst, target):
     serialInst.write(
         bytes(str(float(target))+'\n', 'utf-8'))
     serialInst.flush()
-# endregion
 
+def lowPassFilter(data, FREQ, TIME):
+    data_filt = np.zeros((int(FREQ * TIME), 4))
+    fn = (FREQ) / 2  
+    fp = 0.001              
+    fs = 0.7                   
+    gpass = 1                
+    gstop = 40               
+    Wp = fp / fn
+    Ws = fs / fn
+    N, Wn = signal.buttord(Wp, Ws, gpass, gstop)
+
+    b, a = signal.butter(N, Wn, btype='lowpass')
+    for i in range(4):
+        data_filt[:, i] = signal.filtfilt(b, a, data[:, i])
+    return data_filt
+
+# endregion
 
 if __name__ == '__main__':
     main()
