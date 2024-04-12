@@ -4,11 +4,11 @@ import numpy as np
 from Gather_Data import CONTROL_FREQ, CONTROL_TIME
 
 
-# DATA_PATH = "C:\\Users\\Matsushima\\Desktop\\study\\gripper\\data"
-DATA_PATH = "C:\\Users\\imout\\Desktop\\study\\gripper\\data"
-SENSOR_CSV_NAME = "REAlTIME_DATA"
+DATA_PATH = "C:\\Users\\Matsushima\\Desktop\\study\\gripper\\data"
+# DATA_PATH = "C:\\Users\\imout\\Desktop\\study\\gripper\\data"
+SENSOR_CSV_NAME = "RAW_TRAIN_DATA"
 D_AUGUMENTATION = "DATA_AUG"
-LABEL_CSV_NAME = "R_LABEL"
+LABEL_CSV_NAME = "LABEL"
 L_AUGUMENTATION = "LABEL_AUG"
 
 multiple = 2
@@ -36,23 +36,24 @@ def main():
     reshaped = original_data.values.reshape((-1, int(CONTROL_FREQ * CONTROL_TIME), 3))
     object_num = reshaped.shape[0]
     print(reshaped.shape)
-    NOISED = np.zeros((object_num* multiple, int(CONTROL_FREQ* CONTROL_TIME), 3)) # (N* n) * T * 3
+    NOISED = np.zeros((object_num* multiple, int(CONTROL_FREQ* CONTROL_TIME), 3)) # (N* mul) * T * 3
     Label_Aug = np.zeros((int(CONTROL_FREQ* CONTROL_TIME), object_num* multiple))
+    NOISED_reshape = np.zeros((int(CONTROL_FREQ* CONTROL_TIME), 3 *object_num* multiple))
     for i in range(multiple):
         for j in range(object_num):
             
-            NOISED[2*i + j, :, 0] = reshaped[i, :, 0] + np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-            NOISED[2*i + j, :, 1] = reshaped[i, :, 1] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-            NOISED[2*i + j, :, 2] = reshaped[i, :, 2] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
+            NOISED[object_num*i + j, :, 0] = reshaped[i, :, 0] + np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
+            NOISED[object_num*i + j, :, 1] = reshaped[i, :, 1] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
+            NOISED[object_num*i + j, :, 2] = reshaped[i, :, 2] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
             # NOISED[2*i +1, :, 0] = reshaped[i, :, 0] + np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
             # NOISED[2*i +1, :, 1] = reshaped[i, :, 1] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
             # NOISED[2*i +1, :, 2] = reshaped[i, :, 2] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))        
-            Label_Aug[:, 2*i + j] = label.values[:, i]
+            Label_Aug[:, object_num*i + j] = label.values[:, j]
             # Label_Aug[:, 2*i +1] = label.values[:, i]
 
 
-    NOISED = NOISED.reshape((int(CONTROL_FREQ * CONTROL_TIME), -1))
-    df_noised = pd.DataFrame(NOISED)
+    NOISED_reshape = NOISED.reshape((int(CONTROL_FREQ * CONTROL_TIME), -1))
+    df_noised = pd.DataFrame(NOISED_reshape)
     df_label_aug = pd.DataFrame(Label_Aug)
     
     updated_df = pd.concat([original_data, df_noised], axis =1)
