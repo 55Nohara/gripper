@@ -13,14 +13,6 @@ L_AUGUMENTATION = "LABEL_AUG"
 
 multiple = 2
 
-def add_noise(raw_data, noised_data , i):
-    noised_data[i, :, 0] = raw_data[i, :, 0] + np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-    noised_data[i, :, 1] = raw_data[i, :, 1] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-    noised_data[i, :, 2] = raw_data[i, :, 2] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-
-    return noised_data
-
-
 def main():
     try:
             os.makedirs(DATA_PATH, exist_ok=True)
@@ -42,15 +34,10 @@ def main():
     for i in range(multiple):
         for j in range(object_num):
             
-            NOISED[object_num*i + j, :, 0] = reshaped[i, :, 0] + np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-            NOISED[object_num*i + j, :, 1] = reshaped[i, :, 1] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-            NOISED[object_num*i + j, :, 2] = reshaped[i, :, 2] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-            # NOISED[2*i +1, :, 0] = reshaped[i, :, 0] + np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-            # NOISED[2*i +1, :, 1] = reshaped[i, :, 1] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
-            # NOISED[2*i +1, :, 2] = reshaped[i, :, 2] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))        
+            NOISED[object_num*i + j, :, 0] = reshaped[j, :, 0] + np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
+            NOISED[object_num*i + j, :, 1] = reshaped[j, :, 1] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))
+            NOISED[object_num*i + j, :, 2] = reshaped[j, :, 2] + 0.01 * np.random.rand( int(CONTROL_FREQ* CONTROL_TIME))     
             Label_Aug[:, object_num*i + j] = label.values[:, j]
-            # Label_Aug[:, 2*i +1] = label.values[:, i]
-
 
     NOISED_reshape = NOISED.reshape((int(CONTROL_FREQ * CONTROL_TIME), -1))
     df_noised = pd.DataFrame(NOISED_reshape)
