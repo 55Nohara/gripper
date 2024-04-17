@@ -53,41 +53,48 @@ class FNN_TDNN(nn.Module):
         
         return x
 
-#内包表記にしたい
+
 class TDNN_Dataset():
     def __init__(self, csvWithPath, fileNameData, fileNameLabel, t_input):
         data_ = pd.read_csv(csvWithPath+"\\"+fileNameData+".csv", encoding='utf-8').iloc[:, :].values
         label_ = pd.read_csv(csvWithPath+"\\"+fileNameLabel+".csv", encoding='utf-8').iloc[:, :].values
-        T_scale = int(data_.shape[0]) ###T
+        T_scale = int(data_.shape[0]) ###T : 1280
         num_objects = int(data_.shape[1]/3) ###N
         data_ = data_.reshape((-1, T_scale, 3)) ###dim of data_: N* T* 3
+        # data_[:, :, 0] /= 6
+        # data_[:, :, 1] /= 4
+        # data_[:, :, 2] /= 30
         
         
         # reshape data to (N*(T-t_input-1)) * t_input* 3
-        fin_datasets = np.empty((num_objects * (T_scale - t_input + 1), t_input, 3)) ### (N*(T-t_input-1)) * t_input * 3
-        init_datasets = np.zeros(((num_objects * (t_input-1)), t_input, 3))
+        fin_datasets = np.empty((num_objects * (T_scale +1), t_input, 3)) ### (N*(T +2)) * t_input * 3
+        init_datasets = np.zeros(((num_objects * t_input), t_input, 3))  ##padding : (N* t_input) * t_input *3
         for i in range(num_objects): ### i:object number
-            for j in range(T_scale -t_input+1): ### j:
+            for j in range(T_scale -t_input +1): ### j:
                 start_col = j
-                end_col = j + t_input
-                fin_datasets[i*(T_scale - t_input +1) + j] = data_[i, start_col:end_col, :]
+                end_col = j + t_input 
+                
+                fin_datasets[i*(T_scale +1) + t_input+ j] = data_[i, start_col:end_col, :]
             # 0 padding
-            for k in range(t_input-1):
+            for k in range(t_input):
                 start_col = k
-                init_datasets[i, t_input-k:t_input+1, :] = data_[i, 0:k, :]
-                fin_datasets[i*(T_scale- t_input + 1) + k] = init_datasets[i, k, :]
+                init_datasets[i *t_input + k, t_input-k:t_input+1, :] = data_[i, 0:k, :]
+                fin_datasets[i*(T_scale + 1) + k] = init_datasets[i * t_input + k]
         
         #prepare label sets
         result_list = []
         for i in range(num_objects):
             row_value = label_[i, 0]
-            repeated_data = np.full((( T_scale), 1), row_value)
+            repeated_data = np.full(( (T_scale + 1), 1), row_value)
             result_list.append(repeated_data)
 
         fin_labelsets = np.concatenate(result_list, axis=1).reshape((-1,1))
+        # df_data = pd.DataFrame(fin_datasets.reshape(-1, t_input *3))
+        # df_labels = pd.DataFrame(fin_labelsets)
 
-        #Data_Augmentation
-        
+        # df_data.to_csv("data.csv", index=False, header=False)
+        # df_labels.to_csv("labels.csv", index=False, header=False)
+
 
         self.data = torch.tensor(fin_datasets, dtype=torch.float32)
         self.labels = torch.tensor(fin_labelsets, dtype=torch.float32)
